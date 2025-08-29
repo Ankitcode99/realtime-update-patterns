@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<link rel="stylesheet" href="style.css">
+<body>
+    <script>
+        const matchId = 'INDvAUS';
+        let matchStarted = false;
+
+        function updateCommentary(elementId, text) {
+            const commentaryBox = document.getElementById(elementId);
+            commentaryBox.textContent += `\n${text}`;
+            commentaryBox.scrollTop = commentaryBox.scrollHeight;
+        }
+
+        function checkInningsOver(s) {
+            if (s.score.wickets === 10) {
+                console.log("Innings over, stopping all updates");
+                if(shortPollInterval) clearInterval(shortPollInterval);
+                stopSSE();
+                stopLongPoll();
+                stopWebSocket();
+                matchStarted = false;
+                return true;
+            }
+            return false;
+        }
+
+        // --- Short Polling ---
+        async function tick() {
+          if (!matchStarted) return;
+          const r = await fetch(`http://localhost:3000/api/score?matchId=${matchId}`);
+          const s = await r.json();
+          document.getElementById('short-poll').textContent = `${s.score.batting} ${s.score.runs}/${s.score.wickets} - ${s.score.overs.toFixed(1)}`
+          updateCommentary('short-poll-commentary', s.commentary + "  " + s.score.overs.toFixed(1) + " overs");
+          if (checkInningsOver(s)) {
+            clearInterval(shortPollInterval);
+          }
+        }
+        const shortPollInterval = setInterval(tick, 5000);
+        tick();
+
+        // --- Server-Sent Events ---
+        let es = null;
+        let sseStarted = false;
+
+        function startSSE() {
+            if (sseStarted) return;
+            sseStarted = true;
+            document.getElementById('sse-commentary').textContent = '';
+            es = new EventSource(`http://localhost:3000/api/score/sse?matchId=${matchId}`);
+            es.addEventListener('score', (ev) => {
+                const s = JSON.parse(ev.data);
+                document.getElementById('sse').textContent = `${s.score.batting} ${s.score.runs}/${s.score.wickets} - ${s.score.overs.toFixed(1)}`
+                updateCommentary('sse-commentary', s.commentary + "  " + s.score.overs.toFixed(1) + " overs");
+                if (checkInningsOver(s)) {
+                    stopSSE();
+                }
+            });
+        }
+        function stopSSE() {
+            if (!sseStarted) return;
+            sseStarted = false;
+            es.close();
+        }
+
+        // --- Long Polling ---
+        let longPollStarted = false;
+        let longPollController = new AbortController();
+        let longPollVersion = 0;
+
+        async function longPollTick() {
+            try {
+                const r = await fetch(`http://localhost:3000/api/score/long?matchId=${matchId}&since=${longPollVersion}`, { signal: longPollController.signal });
+                const s = await r.json();
+                longPollVersion = s.version;
+                document.getElementById('long-poll').textContent = `${s.score.batting} ${s.score.runs}/${s.score.wickets} - ${s.score.overs.toFixed(1)}`;
+                updateCommentary('long-poll-commentary', s.commentary + "  " + s.score.overs.toFixed(1) + " overs");
+                if (checkInningsOver(s)) {
+                    stopLongPoll();
+                }
+                if (longPollStarted) {
+                    longPollTick();
+                }
+            } catch (e) {
+                // Aborted, do nothing
+            }
+        }
+
+        function startLongPoll() {
+            if (longPollStarted) return;
+            longPollStarted = true;
+            document.getElementById('long-poll-commentary').textContent = '';
+            longPollController = new AbortController();
+            longPollTick();
+        }
+
+        function stopLongPoll() {
+            if (!longPollStarted) return;
+            longPollStarted = false;
+            longPollController.abort();
+        }
+
+        // --- Web Sockets ---
+        let ws = null;
+        let wsStarted = false;
+
+        function startWebSocket() {
+            if (wsStarted) return;
+            wsStarted = true;
+            document.getElementById('ws-commentary').textContent = '';
+            ws = new WebSocket(`ws://localhost:3000/ws?matchId=${matchId}`);
+            ws.onmessage = (ev) => {
+                const s = JSON.parse(ev.data);
+                document.getElementById('ws').textContent = `${s.score.batting} ${s.score.runs}/${s.score.wickets} - ${s.score.overs.toFixed(1)}`;
+                updateCommentary('ws-commentary', s.commentary + "  " + s.score.overs.toFixed(1) + " overs");
+                if (checkInningsOver(s)) {
+                    stopWebSocket();
+                }
+            };
+        }
+
+        function stopWebSocket() {
+            if (!wsStarted) return;
+            wsStarted = false;
+            if (ws) {
+                ws.close();
+            }
+        }
+
+
+        async function startMatch() {
+            if (matchStarted) return;
+            matchStarted = true;
+            await fetch('http://localhost:3000/api/startMatch', { method: 'POST' });
+        }
+    </script>
+
+    <h1 style="text-align: center;">
+        Realtime Update Patterns
+    </h1>
+    <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+        <button onclick="startMatch()" id="start-match">Start Match in Background</button>
+    </div>
+    <div id="score-pannel" style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="score-row" style="display: flex; gap: 20px;">
+            <div id="short-poll-pannel" class="panel">
+                <h2>Score from short polling</h2>
+                <pre id="short-poll"></pre>
+                <pre id="short-poll-commentary" class="commentary"></pre>
+            </div>
+            <div id="sse-pannel" class="panel">
+                <h2>Score from Server Sent Events <button onclick="startSSE()" id="start-sse">Start</button> <button onclick="stopSSE()" id="stop-sse">Stop</button></h2>
+                <pre id="sse"></pre>
+                <pre id="sse-commentary" class="commentary"></pre>    
+            </div>
+        </div>
+        <div class="score-row" style="display: flex; gap: 20px;">
+            <div id="long-poll-pannel" class="panel">
+                <h2>Score from Long Polling <button onclick="startLongPoll()">Start</button> <button onclick="stopLongPoll()">Stop</button></h2>
+                <pre id="long-poll"></pre>
+                <pre id="long-poll-commentary" class="commentary"></pre>
+            </div>
+            <div id="ws-pannel" class="panel">
+                <h2>Score from Web Sockets <button onclick="startWebSocket()">Start</button> <button onclick="stopWebSocket()">Stop</button></h2>
+                <pre id="ws"></pre>
+                <pre id="ws-commentary" class="commentary"></pre>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
