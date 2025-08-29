@@ -124,22 +124,31 @@ app.get("/api/score/sse", async (req, rep) => {
 
 //     connection.socket.on('')
 //   });
-app.register(async function (fastify) {
-    fastify.get(
-      "/online-status",
-      {
-        websocket: true,
-      },
-      (connection, req) => {
-        // console.log("state", connection._socket)
-        // if (connection.socket.readyState !== connection.socket.OPEN) return;
-        connection._socket.on("message", msg => {
-          console.log("received:", msg.toString());
-          connection.socket.send(`Hello from Fastify. Your message is ${msg}`);
-        });
-      }
-    );
-  });
+app.register(async function (app) {
+  app.get('/ws', { websocket: true }, (socket /* WebSocket */, req /* FastifyRequest */) => {
+    // socket.on('message', message => {
+    //   // message.toString() === 'hi from client'
+    //   socket.send('hi from server')
+    // })
+
+    const { matchId = "INDvAUS" } = (req.query as any) ?? {};
+  
+    wsClients[matchId] = wsClients[matchId] ?? new Set();
+    wsClients[matchId].add(socket); // ✅ this is the real WebSocket
+
+    console.log("Client connected", Object(socket).toString);
+    // Send current state on connect
+    socket.send(JSON.stringify(getMatch(matchId)));
+  
+    socket.on("message", (message) => {
+      console.log("received:", message.toString());
+    });
+  
+    socket.on("close", () => {
+      wsClients[matchId].delete(socket);
+    });
+  })
+})
 
 app.get('/hello-ws', { websocket: true }, (connection, req) => {
     connection.socket.on('message', message => {

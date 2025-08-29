@@ -20,10 +20,10 @@
         function checkInningsOver(s) {
             if (s.score.wickets === 10) {
                 console.log("Innings over, stopping all updates");
-                if(shortPollInterval) clearInterval(shortPollInterval);
-                stopSSE();
-                stopLongPoll();
-                stopWebSocket();
+                // if(shortPollInterval) clearInterval(shortPollInterval);
+                // stopSSE();
+                // stopLongPoll();
+                // stopWebSocket();
                 matchStarted = false;
                 return true;
             }
