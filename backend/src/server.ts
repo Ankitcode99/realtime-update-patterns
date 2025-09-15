@@ -97,40 +97,9 @@ app.get("/api/score/sse", async (req, rep) => {
 
 // ——— WebSockets (bidirectional) ———
 // ws://localhost:3000/ws?matchId=INDvAUS
-// app.get("/ws", { websocket: true }, (connection, req) => {
-//     const { matchId = "INDvAUS" } = (req.query as any) ?? {};
-  
-//     wsClients[matchId] = wsClients[matchId] ?? new Set();
-//     wsClients[matchId].add(connection.socket); // ✅ this is the real WebSocket
-
-//     console.log("Client connected", Object(connection.socket).toString);
-//     // Send current state on connect
-//     connection.socket.send(JSON.stringify(getMatch(matchId)));
-  
-//     connection.socket.on("message", (message) => {
-//       console.log("received:", message.toString());
-//     });
-  
-//     connection.socket.on("close", () => {
-//       wsClients[matchId].delete(connection.socket);
-//     });
-//   });
-
-// app.get("/ws", { websocket: true }, (connection /* SocketStream */, req) => {
-//     connection.socket.on("message", message => {
-//       // Echo the message back
-//       connection.socket.send("Echo: " + message);
-//     });
-
-//     connection.socket.on('')
-//   });
 app.register(async function (app) {
   app.get('/ws', { websocket: true }, (socket /* WebSocket */, req /* FastifyRequest */) => {
-    // socket.on('message', message => {
-    //   // message.toString() === 'hi from client'
-    //   socket.send('hi from server')
-    // })
-
+    
     const { matchId = "INDvAUS" } = (req.query as any) ?? {};
   
     wsClients[matchId] = wsClients[matchId] ?? new Set();
